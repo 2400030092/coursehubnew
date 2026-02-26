@@ -32,6 +32,7 @@ export const Register = () => {
         password: data.password,
         role: data.role
       });
+      console.debug('Register result:', result);
 
       if (result.success) {
         toast.success('Account created successfully!');

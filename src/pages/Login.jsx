@@ -22,6 +22,7 @@ export const Login = () => {
     try {
       // Try to login first
       const result = await login(email, password);
+      console.debug('Demo login result:', result);
 
       if (result.success) {
         toast.success(`Welcome back, ${role}!`);
@@ -36,6 +37,7 @@ export const Login = () => {
             lastName: role.charAt(0).toUpperCase() + role.slice(1),
             role
           });
+          console.debug('Demo register result:', regResult);
 
           if (regResult.success) {
             toast.success(`Demo ${role} account created!`);
@@ -67,6 +69,7 @@ export const Login = () => {
     setLoading(true);
     try {
       const result = await login(data.email, data.password);
+      console.debug('Login result:', result);
       if (result.success) {
         toast.success('Welcome back!');
         navigate(from, { replace: true });
@@ -85,6 +88,7 @@ export const Login = () => {
     setGoogleLoading(true);
     try {
       const result = await signInWithGoogle();
+      console.debug('Google sign-in result:', result);
       if (result.success) {
         toast.success('Welcome!');
         navigate(from, { replace: true });
