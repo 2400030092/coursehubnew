@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SEO } from '../components/SEO';
 import { CreditCard, Lock, CheckCircle } from 'lucide-react';
-import { saveEnrollment } from '../utils/mockData';
+import { saveEnrollment, getCourseById } from '../utils/mockData';
 import { useAuth } from '../contexts/AuthContext';
 
 const Payment = () => {
@@ -12,20 +12,54 @@ const Payment = () => {
     const [amount, setAmount] = useState(0);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState('card');
+    const [selectedBank, setSelectedBank] = useState('hdfc');
+    const [upiId, setUpiId] = useState('demo@upi');
+    const [course, setCourse] = useState(null);
 
     useEffect(() => {
+        // Prefer explicit amount passed via state
         if (location.state?.amount) {
             setAmount(location.state.amount);
         }
-    }, [location.state]);
+
+        // Also support ?courseId=123 in the URL
+        try {
+            const params = new URLSearchParams(location.search);
+            const cid = params.get('courseId');
+            if (cid) {
+                const c = getCourseById(parseInt(cid, 10));
+                if (c) {
+                    setCourse(c);
+                    setAmount(c.price || 0);
+                }
+            }
+        } catch (e) { void e; }
+    }, [location.state, location.search]);
+
+    const enrollUser = (targetCourse) => {
+        if (!user || !targetCourse) return;
+        saveEnrollment({
+            courseId: targetCourse.id,
+            studentId: user.id,
+            title: targetCourse.title,
+            description: targetCourse.description || 'Enrolled via payment',
+            thumbnail: targetCourse.thumbnail || null,
+            level: targetCourse.level || 'beginner',
+            price: targetCourse.price || 0,
+            firstName: targetCourse.firstName || 'Instructor',
+            lastName: targetCourse.lastName || '',
+            instructorAvatar: targetCourse.instructorAvatar || null
+        });
+    };
 
     const handleSubmit = (e) => {
         e.preventDefault();
         setIsProcessing(true);
 
-        // Simulate payment processing
+        // Simulate payment processing depending on selected method
         setTimeout(() => {
-            // Enroll in courses
+            // If this is a cart checkout (cartItems in state), reuse existing behavior
             if (location.state?.cartItems && user) {
                 location.state.cartItems.forEach(item => {
                     saveEnrollment({
@@ -41,6 +75,8 @@ const Payment = () => {
                         instructorAvatar: null
                     });
                 });
+            } else if (course && user) {
+                enrollUser(course);
             }
 
             setIsProcessing(false);
@@ -49,8 +85,8 @@ const Payment = () => {
             // Redirect to dashboard after success
             setTimeout(() => {
                 navigate('/dashboard');
-            }, 2000);
-        }, 2000);
+            }, 1600);
+        }, 1400);
     };
 
     if (isSuccess) {
@@ -106,69 +142,74 @@ const Payment = () => {
                         </div>
 
                         <div className="pt-6 border-t border-gray-100 dark:border-gray-700">
-                            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">Payment Details</h3>
+                            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">Payment Method</h3>
 
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                                        Card Number<span className="text-red-500">*</span>
-                                    </label>
-                                    <div className="relative">
-                                        <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                                        <input
-                                            type="text"
-                                            placeholder="0000 0000 0000 0000"
-                                            required
-                                            className="w-full pl-12 pr-4 py-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                                            Expiration<span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="text"
-                                            placeholder="MM/YY"
-                                            required
-                                            className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                                            CVV<span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="text"
-                                            placeholder="123"
-                                            required
-                                            maxLength="3"
-                                            className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                                        ZIP Code<span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder="ZIP"
-                                        required
-                                        className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
-                                    />
-                                </div>
+                            <div className="flex gap-2 mb-4">
+                                <button type="button" onClick={() => setPaymentMethod('card')} className={`px-3 py-2 rounded ${paymentMethod==='card' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700'}`}>Card</button>
+                                <button type="button" onClick={() => setPaymentMethod('upi')} className={`px-3 py-2 rounded ${paymentMethod==='upi' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700'}`}>UPI</button>
+                                <button type="button" onClick={() => setPaymentMethod('netbank')} className={`px-3 py-2 rounded ${paymentMethod==='netbank' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700'}`}>Netbanking</button>
                             </div>
+
+                            {paymentMethod === 'card' && (
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Card Number<span className="text-red-500">*</span></label>
+                                        <div className="relative">
+                                            <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                            <input type="text" placeholder="0000 0000 0000 0000" required className="w-full pl-12 pr-4 py-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all" />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Expiration<span className="text-red-500">*</span></label>
+                                            <input type="text" placeholder="MM/YY" required className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">CVV<span className="text-red-500">*</span></label>
+                                            <input type="text" placeholder="123" required maxLength="3" className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all" />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">ZIP Code<span className="text-red-500">*</span></label>
+                                        <input type="text" placeholder="ZIP" required className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all" />
+                                    </div>
+                                </div>
+                            )}
+
+                            {paymentMethod === 'upi' && (
+                                <div className="space-y-4">
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Scan this QR with any UPI app or pay to UPI ID</p>
+                                    <div className="flex items-center gap-4">
+                                        <img src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(`upi:pay?pa=${upiId}&pn=Demo&am=${amount}`)}&size=200x200`} alt="UPI QR" className="w-36 h-36 bg-white rounded" />
+                                        <div>
+                                            <div className="text-sm font-medium">UPI ID</div>
+                                            <div className="text-lg font-semibold">{upiId}</div>
+                                            <div className="mt-2">
+                                                <input value={upiId} onChange={(e) => setUpiId(e.target.value)} className="px-3 py-2 rounded border bg-white dark:bg-gray-700" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-gray-500">Sample QR — this is for demo purposes only.</p>
+                                </div>
+                            )}
+
+                            {paymentMethod === 'netbank' && (
+                                <div className="space-y-4">
+                                    <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Choose your bank</label>
+                                    <select value={selectedBank} onChange={(e) => setSelectedBank(e.target.value)} className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg">
+                                        <option value="hdfc">HDFC Bank</option>
+                                        <option value="sbi">State Bank of India</option>
+                                        <option value="icici">ICICI Bank</option>
+                                        <option value="axis">Axis Bank</option>
+                                    </select>
+                                    <p className="text-xs text-gray-500">You will be redirected to a mock netbanking page (demo only).</p>
+                                </div>
+                            )}
                         </div>
 
-                        <button
-                            type="submit"
-                            disabled={isProcessing}
-                            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-xl shadow-lg shadow-blue-600/30 transform transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
-                        >
+                        <button type="submit" disabled={isProcessing} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-xl shadow-lg shadow-blue-600/30 transform transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none">
                             {isProcessing ? (
                                 <>
                                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -177,7 +218,7 @@ const Payment = () => {
                             ) : (
                                 <>
                                     <Lock className="w-4 h-4" />
-                                    <span>Pay ₹{amount}</span>
+                                    <span>{paymentMethod === 'upi' ? 'Confirm UPI Payment' : `Pay ₹${amount}`}</span>
                                 </>
                             )}
                         </button>

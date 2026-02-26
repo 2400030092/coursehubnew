@@ -7,22 +7,44 @@ import {
   updateProfile as updateFirebaseProfile,
   GoogleAuthProvider,
   signInWithPopup,
-        const result = await getRedirectResult(auth);
-        if (!mounted) return;
+  signInWithRedirect,
+  getRedirectResult
+} from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 
-        // If redirect result exists, we simply cache an auth-only user profile locally.
-        if (result?.user) {
-          const [firstName = 'User', lastName = ''] = (result.user.displayName || 'User').split(' ');
-          setCachedUser(result.user.uid, {
-            id: result.user.uid,
-            email: result.user.email,
-            firstName,
-            lastName,
-            role: 'student',
-            avatar: result.user.photoURL,
-            bio: ''
-          });
+const AuthContext = createContext();
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+// Cache key for localStorage
+const USER_CACHE_KEY = 'coursehub_user_cache';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Helper to get cached user data
+  const getCachedUser = (uid) => {
+    try {
+      const cached = localStorage.getItem(USER_CACHE_KEY);
+      if (cached) {
+        const { data, timestamp, userId } = JSON.parse(cached);
+        const isExpired = Date.now() - timestamp > CACHE_DURATION;
+        if (!isExpired && userId === uid) {
+          return data;
         }
+      }
+    } catch (e) {
+      console.error('Cache read error:', e);
+    }
     return null;
   };
 
@@ -93,40 +115,18 @@ import {
         const result = await getRedirectResult(auth);
         if (!mounted) return;
 
+        // If redirect result exists, cache an auth-only user profile locally.
         if (result?.user) {
-          try {
-            const userDoc = await getDoc(doc(db, 'users', result.user.uid));
-            if (!userDoc.exists()) {
-              const [firstName = 'User', lastName = ''] = (result.user.displayName || 'User').split(' ');
-              const newUserData = {
-                email: result.user.email,
-                firstName,
-                lastName,
-                role: 'student',
-                avatar: result.user.photoURL,
-                bio: '',
-                createdAt: new Date().toISOString()
-              };
-
-              try {
-                await setDoc(doc(db, 'users', result.user.uid), newUserData);
-              } catch (e) {
-                console.warn('Failed to write user document after redirect sign-in (permissions?), continuing:', e);
-              }
-
-              setCachedUser(result.user.uid, {
-                id: result.user.uid,
-                email: result.user.email,
-                firstName,
-                lastName,
-                role: 'student',
-                avatar: result.user.photoURL,
-                bio: ''
-              });
-            }
-          } catch (e) {
-            console.warn('Error processing redirect sign-in result:', e);
-          }
+          const [firstName = 'User', lastName = ''] = (result.user.displayName || 'User').split(' ');
+          setCachedUser(result.user.uid, {
+            id: result.user.uid,
+            email: result.user.email,
+            firstName,
+            lastName,
+            role: 'student',
+            avatar: result.user.photoURL,
+            bio: ''
+          });
         }
       } catch (e) {
         // getRedirectResult throws if no redirect or on other errors; ignore silently
@@ -155,6 +155,7 @@ import {
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
+
       // Cache auth-only profile locally; avoid Firestore reads/writes during sign-in
       const [firstName = 'User', lastName = ''] = (result.user.displayName || 'User').split(' ');
       setCachedUser(result.user.uid, {

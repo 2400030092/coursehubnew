@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Star,
   Clock,
@@ -25,6 +25,7 @@ import { SkeletonCard, SkeletonText } from '../components/SkeletonLoader';
 export const CourseDetail = () => {
   const { id } = useParams();
   const { user, isAuthenticated, isStudent } = useAuth();
+  const navigate = useNavigate();
   const { addToCart, isInCart } = useCart();
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -57,25 +58,8 @@ export const CourseDetail = () => {
       toast.error('Please sign in to enroll in courses');
       return;
     }
-
-    setEnrolling(true);
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Mock enrollment
-    const savedEnrollments = JSON.parse(localStorage.getItem('enrollments') || '[]');
-    const newEnrollment = {
-      courseId: parseInt(id),
-      studentId: user.id,
-      enrolledAt: new Date().toISOString(),
-      progress: 0
-    };
-    savedEnrollments.push(newEnrollment);
-    localStorage.setItem('enrollments', JSON.stringify(savedEnrollments));
-
-    setEnrolled(true);
-    toast.success('Successfully enrolled in course!');
-    setEnrolling(false);
+    // Redirect to payment page for processing (handles free courses too)
+    navigate(`/payment?courseId=${id}`, { state: { amount: course?.price || 0 } });
   };
 
   const handleAddToCart = () => {
@@ -261,7 +245,11 @@ export const CourseDetail = () => {
                       <div className="p-4">
                         <div className="space-y-2">
                           {module.lessons.map((lesson, lessonIndex) => (
-                            <div key={lesson.id} className="flex items-center justify-between py-2">
+                            <Link
+                              key={lesson.id}
+                              to={`/course/${course.id}/learn?module=${moduleIndex}&lesson=${lessonIndex}`}
+                              className="flex items-center justify-between py-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded px-2"
+                            >
                               <div className="flex items-center">
                                 <Play className="h-4 w-4 text-gray-400 mr-3" />
                                 <span className="text-sm text-gray-900 dark:text-gray-200">
@@ -276,7 +264,7 @@ export const CourseDetail = () => {
                               <div className="flex items-center">
                                 <span className="text-xs text-gray-500 capitalize">{lesson.type}</span>
                               </div>
-                            </div>
+                            </Link>
                           ))}
                         </div>
                       </div>

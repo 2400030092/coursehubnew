@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader } from '../components/Card';
 import { Button } from '../components/Button';
 import { getCourseById } from '../utils/mockData';
@@ -10,6 +10,7 @@ import { SEO } from '../components/SEO';
 export const CourseViewer = () => {
   const { id } = useParams();
   const courseId = parseInt(id);
+  const location = useLocation();
   const { markVideoCompleted, getCourseProgress, isVideoCompleted, isModuleCompleted } = useProgress();
 
   const [course, setCourse] = useState(null);
@@ -74,6 +75,23 @@ export const CourseViewer = () => {
   // On course load, jump to first uncompleted lesson
   useEffect(() => {
     if (!course || modules.length === 0) return;
+    // If the URL provides explicit module/lesson, prefer that (e.g. when navigating from CourseDetail)
+    try {
+      const params = new URLSearchParams(location.search);
+      const m = params.get('module');
+      const l = params.get('lesson');
+      if (m !== null && l !== null) {
+        const mi = parseInt(m, 10);
+        const li = parseInt(l, 10);
+        if (!Number.isNaN(mi) && !Number.isNaN(li)) {
+          setCurrentModule(mi);
+          setCurrentLesson(li);
+          setExpandedModuleIndex(mi);
+          return;
+        }
+      }
+    } catch (e) { void e; }
+
     const target = findFirstUncompleted();
     if (target) {
       setCurrentModule(target.moduleIndex);
