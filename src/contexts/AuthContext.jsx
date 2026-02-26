@@ -7,44 +7,22 @@ import {
   updateProfile as updateFirebaseProfile,
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
-} from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+        const result = await getRedirectResult(auth);
+        if (!mounted) return;
 
-const AuthContext = createContext();
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
-
-// Cache key for localStorage
-const USER_CACHE_KEY = 'coursehub_user_cache';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  // Helper to get cached user data
-  const getCachedUser = (uid) => {
-    try {
-      const cached = localStorage.getItem(USER_CACHE_KEY);
-      if (cached) {
-        const { data, timestamp, userId } = JSON.parse(cached);
-        const isExpired = Date.now() - timestamp > CACHE_DURATION;
-        if (!isExpired && userId === uid) {
-          return data;
+        // If redirect result exists, we simply cache an auth-only user profile locally.
+        if (result?.user) {
+          const [firstName = 'User', lastName = ''] = (result.user.displayName || 'User').split(' ');
+          setCachedUser(result.user.uid, {
+            id: result.user.uid,
+            email: result.user.email,
+            firstName,
+            lastName,
+            role: 'student',
+            avatar: result.user.photoURL,
+            bio: ''
+          });
         }
-      }
-    } catch (e) {
-      console.error('Cache read error:', e);
-    }
     return null;
   };
 
@@ -81,39 +59,20 @@ export const AuthProvider = ({ children }) => {
           setUser(cachedData);
           setLoading(false);
         } else {
-          // Fetch from Firestore only if no cache
-          try {
-            const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-            const userData = userDoc.exists() ? userDoc.data() : {};
+          // No cached profile — create an auth-only profile immediately and avoid Firestore reads
+          const authOnlyProfile = {
+            id: firebaseUser.uid,
+            email: firebaseUser.email,
+            firstName: firebaseUser.displayName?.split(' ')[0] || 'User',
+            lastName: firebaseUser.displayName?.split(' ')[1] || '',
+            avatar: firebaseUser.photoURL,
+            role: 'student',
+            bio: ''
+          };
 
-            const userProfile = {
-              id: firebaseUser.uid,
-              email: firebaseUser.email,
-              firstName: userData.firstName || firebaseUser.displayName?.split(' ')[0] || 'User',
-              lastName: userData.lastName || firebaseUser.displayName?.split(' ')[1] || '',
-              avatar: firebaseUser.photoURL,
-              role: userData.role || 'student',
-              bio: userData.bio || ''
-            };
-
-            setUser(userProfile);
-            setCachedUser(firebaseUser.uid, userProfile);
-          } catch (error) {
-            console.warn('Error fetching user data (permissions or other). Falling back to auth-only profile:', error);
-            const fallbackProfile = {
-              id: firebaseUser.uid,
-              email: firebaseUser.email,
-              firstName: firebaseUser.displayName?.split(' ')[0] || 'User',
-              lastName: firebaseUser.displayName?.split(' ')[1] || '',
-              avatar: firebaseUser.photoURL,
-              role: 'student',
-              bio: ''
-            };
-            setUser(fallbackProfile);
-            setCachedUser(firebaseUser.uid, fallbackProfile);
-          } finally {
-            setLoading(false);
-          }
+          setUser(authOnlyProfile);
+          setCachedUser(firebaseUser.uid, authOnlyProfile);
+          setLoading(false);
         }
       } else {
         setUser(null);
@@ -196,46 +155,17 @@ export const AuthProvider = ({ children }) => {
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
-
-      // Check if user already exists in Firestore
-      let userDocExists = false;
-      try {
-        const userDoc = await getDoc(doc(db, 'users', result.user.uid));
-        userDocExists = userDoc.exists();
-      } catch (e) {
-        console.warn('Could not read user document (permissions?), proceeding with auth-only user:', e);
-        userDocExists = false;
-      }
-
-      if (!userDocExists) {
-        const [firstName = 'User', lastName = ''] = (result.user.displayName || 'User').split(' ');
-        const newUserData = {
-          email: result.user.email,
-          firstName,
-          lastName,
-          role: 'student',
-          avatar: result.user.photoURL,
-          bio: '',
-          createdAt: new Date().toISOString()
-        };
-
-        try {
-          await setDoc(doc(db, 'users', result.user.uid), newUserData);
-        } catch (e) {
-          console.warn('Failed to write user document on Google sign-in (permissions?), continuing without Firestore write:', e);
-        }
-
-        // Cache the new user data locally even if Firestore write failed
-        setCachedUser(result.user.uid, {
-          id: result.user.uid,
-          email: result.user.email,
-          firstName,
-          lastName,
-          role: 'student',
-          avatar: result.user.photoURL,
-          bio: ''
-        });
-      }
+      // Cache auth-only profile locally; avoid Firestore reads/writes during sign-in
+      const [firstName = 'User', lastName = ''] = (result.user.displayName || 'User').split(' ');
+      setCachedUser(result.user.uid, {
+        id: result.user.uid,
+        email: result.user.email,
+        firstName,
+        lastName,
+        role: 'student',
+        avatar: result.user.photoURL,
+        bio: ''
+      });
 
       return { success: true };
     } catch (error) {
@@ -349,11 +279,15 @@ export const AuthProvider = ({ children }) => {
         });
       }
 
-      // Update Firestore document
-      await setDoc(doc(db, 'users', auth.currentUser.uid), {
-        ...profileData,
-        email: user.email
-      }, { merge: true });
+      // Update Firestore document (non-blocking; tolerate permission errors)
+      try {
+        await setDoc(doc(db, 'users', auth.currentUser.uid), {
+          ...profileData,
+          email: user.email
+        }, { merge: true });
+      } catch (e) {
+        console.warn('Failed to update Firestore profile (permissions?), continuing with local state:', e);
+      }
 
       const updatedUser = { ...user, ...profileData };
       setUser(updatedUser);
