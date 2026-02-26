@@ -6,7 +6,9 @@ import {
   onAuthStateChanged,
   updateProfile as updateFirebaseProfile,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
@@ -123,6 +125,58 @@ export const AuthProvider = ({ children }) => {
     return unsubscribe;
   }, []);
 
+  // Handle redirect sign-in results (for browsers where popups are blocked)
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (!mounted) return;
+
+        if (result?.user) {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', result.user.uid));
+            if (!userDoc.exists()) {
+              const [firstName = 'User', lastName = ''] = (result.user.displayName || 'User').split(' ');
+              const newUserData = {
+                email: result.user.email,
+                firstName,
+                lastName,
+                role: 'student',
+                avatar: result.user.photoURL,
+                bio: '',
+                createdAt: new Date().toISOString()
+              };
+
+              try {
+                await setDoc(doc(db, 'users', result.user.uid), newUserData);
+              } catch (e) {
+                console.warn('Failed to write user document after redirect sign-in (permissions?), continuing:', e);
+              }
+
+              setCachedUser(result.user.uid, {
+                id: result.user.uid,
+                email: result.user.email,
+                firstName,
+                lastName,
+                role: 'student',
+                avatar: result.user.photoURL,
+                bio: ''
+              });
+            }
+          } catch (e) {
+            console.warn('Error processing redirect sign-in result:', e);
+          }
+        }
+      } catch (e) {
+        // getRedirectResult throws if no redirect or on other errors; ignore silently
+      }
+    })();
+
+    return () => { mounted = false; };
+  }, []);
+
   const login = async (email, password) => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
@@ -188,8 +242,17 @@ export const AuthProvider = ({ children }) => {
       const code = error.code || '';
       let userMessage = error.message.replace('Firebase: ', '').replace('Error (auth/', '').replace(')', '');
 
+      // If popups are blocked, fall back to redirect-based sign-in
       if (code === 'auth/popup-blocked' || code === 'auth/web-storage-unsupported') {
-        userMessage = 'Popup blocked or storage unsupported. Please allow popups or try again.';
+        try {
+          const provider = new GoogleAuthProvider();
+          // Start redirect sign-in flow; this will navigate away
+          await signInWithRedirect(auth, provider);
+          return { success: true, redirected: true };
+        } catch (redirectError) {
+          const redirectMsg = redirectError.message?.replace('Firebase: ', '') || 'Redirect sign-in failed';
+          return { success: false, error: redirectMsg, code: redirectError.code || null, message: redirectError.message };
+        }
       }
 
       if (code === 'auth/popup-closed-by-user') {
