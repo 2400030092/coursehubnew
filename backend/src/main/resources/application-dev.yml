@@ -1,0 +1,9 @@
+spring:
+  jpa:
+    show-sql: true
+
+app:
+  initializer:
+    admin:
+      email: ${COURSEHUB_ADMIN_EMAIL:admin@coursehub.local}
+      password: ${COURSEHUB_ADMIN_PASSWORD:Admin@12345}

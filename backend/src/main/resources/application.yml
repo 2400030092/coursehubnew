@@ -1,0 +1,51 @@
+spring:
+  application:
+    name: coursehub-backend
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  datasource:
+    url: jdbc:mysql://localhost:3306/coursehub_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+    username: root
+    password: 12345
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  jackson:
+    time-zone: Asia/Kolkata
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+app:
+  cors:
+    allowed-origins:
+      - http://localhost:5173
+      - http://localhost:3000
+  initializer:
+    enabled: true
+    seed-mentors: true
+    seed-students: true
+    admin:
+      first-name: Demo
+      last-name: Admin
+      email: ${COURSEHUB_ADMIN_EMAIL:admin@30092.com}
+      password: ${COURSEHUB_ADMIN_PASSWORD:Admin@30092}
+    chintu:
+      first-name: Chintu
+      last-name: Kumar
+      email: ${COURSEHUB_CHINTU_EMAIL:chintu@coursehub.local}
+      password: ${COURSEHUB_CHINTU_PASSWORD:Chintu@123}
+   

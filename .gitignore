@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Frontend
+.vite
+frontend/node_modules
+frontend/dist
+frontend/dist-ssr
+
+# Backend
+backend/target

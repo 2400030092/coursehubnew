@@ -1,0 +1,10 @@
+spring:
+  jpa:
+    show-sql: false
+
+app:
+  initializer:
+    enabled: ${COURSEHUB_INITIALIZER_ENABLED:false}
+    admin:
+      email: ${COURSEHUB_ADMIN_EMAIL:admin@coursehub.local}
+      password: ${COURSEHUB_ADMIN_PASSWORD:change-me-in-prod}
